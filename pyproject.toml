@@ -1,0 +1,23 @@
+[project]
+name = "aau-spritegen"
+version = "0.1.0"
+description = "CLI for building MapLibre sprite files"
+authors = [
+    {name = "Kasper Fromm Pedersen", email = "kasperf@cs.aau.dk"},
+]
+dependencies = [
+    "typer==0.12.*",
+    "pillow==10.4.*",
+    "wand==0.6.*",
+]
+requires-python = ">=3.10"
+readme = "README.md"
+license = {text = "MIT"}
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[tool.pdm]
+distribution = true
