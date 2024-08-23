@@ -1,8 +1,17 @@
+import json
 import math
 from pathlib import Path
 
+import typer
+from typer import Option, Typer
+from typing_extensions import Annotated
 from wand.color import Color
 from wand.image import Image
+
+from .model import Sprite, SpriteIcon
+from .services import EnhancedJSONEncoder
+
+app = Typer()
 
 
 def __resize(img: Image, max_dim: int):
@@ -16,46 +25,125 @@ def __resize(img: Image, max_dim: int):
         img.resize(width, max_dim)
 
 
-def __get_sprite_size(images: int) -> tuple[int, int]:
-    sqrt = math.sqrt(images)
-    columns = round(sqrt)
-    rows = math.ceil(images / columns)
+def __compute_columns(images: int, rows: int | None) -> int:
+    if rows is None:
+        sqrt = math.sqrt(images)
+        return round(sqrt)
 
-    return (rows, columns)
+    return math.ceil(images / rows)
 
 
-def main():
+def __compute_rows(images: int, columns: int) -> int:
+    return math.ceil(images / columns)
 
-    input_dir = Path("C:/Users/Kasper Fromm/Desktop/traffic-signs/svg")
-    output_dir = input_dir.parent.joinpath("png")
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    svg_files = list(
-        Path("C:/Users/Kasper Fromm/Desktop/traffic-signs/svg").glob("*.svg")
+def __validate_sprite_size(rows: int, columns: int, svg_cnt: int):
+    if rows * columns < svg_cnt:
+        response: str = typer.prompt(
+            f"All icons cannot fit into a {columns} by {rows} sprite, would you like to continue? [Y/n]"
+        )
+        if response not in {"Y", "Yes", "yes", "YES"}:
+            raise typer.Abort()
+
+
+def __generate_sprite(
+    gap: int,
+    icon_size: int,
+    rows: int,
+    columns: int,
+    svg_files: list[Path],
+    pixel_ratio: float = 1,
+) -> Sprite:
+    icon_size = round(icon_size * pixel_ratio)
+
+    width = gap + columns * (icon_size + gap)
+    height = gap + rows * (icon_size + gap)
+    sprite_img = Image(
+        width=width,
+        height=height,
+        background=Color("transparent"),
+    )
+    sprite_items: dict[str, SpriteIcon] = {}
+
+    left = gap
+    top = gap
+
+    for row in range(rows):
+        for column in range(columns):
+            i = row * columns + column
+            if i >= len(svg_files):
+                break
+
+            svg_path = svg_files[i]
+            with Image(
+                filename=svg_path.as_posix(),
+                background=Color("transparent"),
+            ) as img:
+                __resize(img, icon_size)
+                with img.convert("png") as png_img:
+                    sprite_img.composite(png_img, left, top)
+                    sprite_item = SpriteIcon(
+                        x=left,
+                        y=top,
+                        width=png_img.width,
+                        height=png_img.height,
+                        pixel_ratio=pixel_ratio,
+                    )
+                    sprite_items[svg_path.stem] = sprite_item
+
+                    left += icon_size + gap
+        left = gap
+        top += icon_size + gap
+
+    return Sprite(sprite_img, sprite_items)
+
+
+def __write_sprite(
+    sprite: Sprite,
+    out: Path,
+):
+    print(f"Writing {out.name} PNG file...")
+    sprite.image.save(filename=out.with_suffix(".png").as_posix())
+
+    print(f"Writing {out.name} JSON file...")
+    out.with_suffix(".json").write_text(
+        json.dumps(sprite.icons, cls=EnhancedJSONEncoder)
     )
 
-    columns = __get_sprite_size(len(svg_files))
 
-    sprite = Image(width=400, height=20, background=Color("transparent"))
+@app.command()
+def main(
+    svg_dir: Path,
+    out_dir: Path,
+    gap: Annotated[int, Option("--gap", "-g", help="Gap between icons")] = 5,
+    icon_size: Annotated[int, Option("--icon-size", "-s", help="Icon size")] = 20,
+    rows: Annotated[
+        int | None,
+        Option("--rows", "-r", help="Number of rows, will be calculated if not set"),
+    ] = None,
+    columns: Annotated[
+        int | None,
+        Option(
+            "--columns", "-c", help="Number of columns, will be calculated if not set"
+        ),
+    ] = None,
+):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    svg_files = list(svg_dir.glob("*.svg"))
 
-    left = 0
+    svg_cnt = len(svg_files)
+    if columns is None:
+        columns = __compute_columns(svg_cnt, rows)
+    if rows is None:
+        rows = __compute_rows(svg_cnt, columns)
 
-    for svg_file in svg_files:
-        with Image(
-            filename=svg_file.as_posix(),
-            background=Color("transparent"),
-        ) as img:
-            __resize(img, 20)
-            with img.convert("png") as png_img:
-                sprite.composite(png_img, left, 0)
-                left += 25
-                # png_img.save(
-                #     filename=output_dir.joinpath(
-                #         svg_file.with_suffix(".png").name
-                #     ).as_posix()
-                # )
-    sprite.save(filename=output_dir.joinpath("sprite.png").as_posix())
+    __validate_sprite_size(rows, columns, svg_cnt)
+    print(f"Creating a {rows} by {columns} sprite from {svg_cnt} SVG files...")
+    sprite = __generate_sprite(gap, icon_size, rows, columns, svg_files, pixel_ratio=1)
+    __write_sprite(sprite, out_dir.joinpath("sprite"))
+    sprite = __generate_sprite(gap, icon_size, rows, columns, svg_files, pixel_ratio=2)
+    __write_sprite(sprite, out_dir.joinpath("sprite@2x"))
 
 
 if __name__ == "__main__":
-    main()
+    app()
