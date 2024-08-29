@@ -8,8 +8,8 @@ from typing_extensions import Annotated
 from wand.color import Color
 from wand.image import Image
 
-from .model import Sprite, SpriteIcon
-from .services import EnhancedJSONEncoder
+from aau_spritegen.model import Sprite, SpriteIcon
+from aau_spritegen.services import EnhancedJSONEncoder
 
 app = Typer()
 
