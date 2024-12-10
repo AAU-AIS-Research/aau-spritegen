@@ -13,7 +13,7 @@ requires-python = ">=3.10,<3.13"
 readme = "README.md"
 license = {text = "MIT"}
 
-[tool.pdm.dev-dependencies]
+[dependency-groups]
 dev = [
     "pyinstaller==6.10.*",
     "distro==1.9.*",
@@ -22,12 +22,5 @@ dev = [
 [project.scripts]
 spritegen = "aau_spritegen.main:app"
 
-[build-system]
-requires = ["pdm-backend", "pyinstaller==6.10.*", "distro==1.9.*"]
-build-backend = "pdm.backend"
-
-[tool.pdm.scripts]
-post_build = "build.py"
-
-[tool.pdm]
-distribution = true
+[tool.uv]
+package = true
