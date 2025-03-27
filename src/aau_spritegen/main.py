@@ -135,9 +135,4 @@ def main(
 
 
 if __name__ == "__main__":
-    svg_dir = Path("/srv/data/gomap_airflow/trffic-signs")
-    out_dir = Path("./test")
-    print(out_dir)
-    main(svg_dir, out_dir)
-
-    # app()
+    app()
