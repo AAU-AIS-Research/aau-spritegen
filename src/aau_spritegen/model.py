@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from wand.image import Image
+from pyvips import Image
 
 
 @dataclass

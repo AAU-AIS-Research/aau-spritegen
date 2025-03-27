@@ -3,10 +3,10 @@ import math
 from pathlib import Path
 
 import typer
+from pyvips import Image
+from pyvips.enums import BlendMode
 from typer import Option, Typer
 from typing_extensions import Annotated
-from wand.color import Color
-from wand.image import Image
 
 from aau_spritegen.model import Sprite, SpriteIcon
 from aau_spritegen.services import EnhancedJSONEncoder
@@ -15,14 +15,7 @@ app = Typer()
 
 
 def __resize(img: Image, max_dim: int):
-    width, height = img.size
-
-    if width > height:
-        height = round(height / width * max_dim)
-        img.resize(max_dim, height)
-    else:
-        width = round(width / height * max_dim)
-        img.resize(width, max_dim)
+    return img.resize(max_dim / max(img.width, img.height))  # type: ignore
 
 
 def __compute_columns(images: int, rows: int | None) -> int:
@@ -58,11 +51,9 @@ def __generate_sprite(
 
     width = gap + columns * (icon_size + gap)
     height = gap + rows * (icon_size + gap)
-    sprite_img = Image(
-        width=width,
-        height=height,
-        background=Color("transparent"),
-    )
+
+    sprite_img = Image.black(width, height, bands=4).copy(interpretation="srgb")  # type: ignore
+    print(sprite_img.bands)
     sprite_items: dict[str, SpriteIcon] = {}
 
     left = gap
@@ -75,23 +66,21 @@ def __generate_sprite(
                 break
 
             svg_path = svg_files[i]
-            with Image(
-                filename=svg_path.as_posix(),
-                background=Color("transparent"),
-            ) as img:
-                __resize(img, icon_size)
-                with img.convert("png") as png_img:
-                    sprite_img.composite(png_img, left, top)
-                    sprite_item = SpriteIcon(
-                        x=left,
-                        y=top,
-                        width=png_img.width,
-                        height=png_img.height,
-                        pixel_ratio=pixel_ratio,
-                    )
-                    sprite_items[svg_path.stem] = sprite_item
 
-                    left += icon_size + gap
+            with Image.new_from_file(svg_path.as_posix()) as img:  # type: ignore
+                img = __resize(img, icon_size)
+
+                sprite_img = sprite_img.composite(img, BlendMode.OVER, x=left, y=top)
+                sprite_item = SpriteIcon(
+                    x=left,
+                    y=top,
+                    width=img.width,  # type: ignore
+                    height=img.height,  # type: ignore
+                    pixel_ratio=pixel_ratio,
+                )
+                sprite_items[svg_path.stem] = sprite_item
+
+                left += icon_size + gap
         left = gap
         top += icon_size + gap
 
@@ -103,7 +92,7 @@ def __write_sprite(
     out: Path,
 ):
     print(f"Writing {out.name} PNG file...")
-    sprite.image.save(filename=out.with_suffix(".png").as_posix())
+    sprite.image.write_to_file(out.with_suffix(".png").as_posix())
 
     print(f"Writing {out.name} JSON file...")
     out.with_suffix(".json").write_text(
@@ -146,4 +135,9 @@ def main(
 
 
 if __name__ == "__main__":
-    app()
+    svg_dir = Path("/srv/data/gomap_airflow/trffic-signs")
+    out_dir = Path("./test")
+    print(out_dir)
+    main(svg_dir, out_dir)
+
+    # app()
